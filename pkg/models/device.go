@@ -60,13 +60,19 @@ type ConnectedDevice struct {
 	LastSeen time.Time `json:"last_seen" bson:"last_seen"`
 }
 
-type Params struct {
+type PropertyParams struct {
 	Name     string `json:"name"`
 	Operator string `json:"operator"`
 	Value    string `json:"value"`
 }
 
+type OperatorParams struct {
+	Name string `json:"name"`
+}
+
 type Filter struct {
-	Type   string `json:"type"`
-	Params Params `json:"params"`
+	Type           string         `json:"type,omitempty"`
+	PropertyParams PropertyParams `json:"property_params,omitempty"`
+	OperatorParams OperatorParams `json:"operator_params,omitempty"`
+	Name           string         `json:"name,omitempty"`
 }

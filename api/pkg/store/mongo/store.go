@@ -25,37 +25,57 @@ func NewStore(db *mongo.Database) *Store {
 
 func (s *Store) ListDevices(ctx context.Context, perPage, page int, filters []models.Filter) ([]models.Device, int, error) {
 	skip := perPage * (page - 1)
+	var queryMatch []bson.M
 	var queryFilter []bson.M
 	for _, filter := range filters {
-		if filter.Type != "property" {
-			continue
-		}
-
-		switch filter.Params.Operator {
-		case "like":
-			queryFilter = append(queryFilter, bson.M{
-				filter.Params.Name: bson.M{
-					"$regex":   filter.Params.Value,
-					"$options": "i",
-				},
-			})
-		case "eq":
-			queryFilter = append(queryFilter, bson.M{
-				filter.Params.Name: bson.M{
-					"$eq": filter.Params.Value,
-				},
-			})
-		case "bool":
-			operator, err := strconv.ParseBool(filter.Params.Value)
-			if err != nil {
-				return nil, 0, err
+		switch filter.Type {
+		case "property":
+			switch filter.PropertyParams.Operator {
+			case "like":
+				queryFilter = append(queryFilter, bson.M{
+					filter.PropertyParams.Name: bson.M{
+						"$regex":   filter.PropertyParams.Value,
+						"$options": "i",
+					},
+				})
+			case "eq":
+				queryFilter = append(queryFilter, bson.M{
+					filter.PropertyParams.Name: bson.M{
+						"$eq": filter.PropertyParams.Value,
+					},
+				})
+			case "bool":
+				operator, err := strconv.ParseBool(filter.PropertyParams.Value)
+				if err != nil {
+					return nil, 0, err
+				}
+				queryFilter = append(queryFilter, bson.M{
+					filter.PropertyParams.Name: bson.M{
+						"$eq": operator,
+					},
+				})
 			}
-			queryFilter = append(queryFilter, bson.M{
-				filter.Params.Name: bson.M{
-					"$eq": operator,
-				},
+		case "operator":
+			var operator string
+			switch filter.OperatorParams.Name {
+			case "and":
+				operator = "$and"
+			case "or":
+				operator = "$or"
+			}
+
+			queryMatch = append(queryMatch, bson.M{
+				"$match": bson.M{operator: queryFilter},
 			})
+
+			queryFilter = nil
 		}
+	}
+
+	if len(queryFilter) > 0 {
+		queryMatch = append(queryMatch, bson.M{
+			"$match": bson.M{"$or": queryFilter},
+		})
 	}
 
 	query := []bson.M{
@@ -92,10 +112,8 @@ func (s *Store) ListDevices(ctx context.Context, perPage, page int, filters []mo
 	})
 
 	// Apply filters if any
-	if len(queryFilter) > 0 {
-		query = append(query, bson.M{
-			"$match": bson.M{"$or": queryFilter},
-		})
+	if len(queryMatch) > 0 {
+		query = append(query, queryMatch...)
 	}
 
 	// Only match for the respective tenant if requested
